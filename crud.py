@@ -21,10 +21,8 @@ def update_todo(db: Session, id: int, todo: schema.ToDoRequest):
     db_todo = db.query(models.Todo).filter(models.Todo.id == id).first()
     if db_todo is None:
         return None
-    db.query(models.Todo).filter(models.Todo.id == id).update({
-        "name": todo.name,
-        "completed": todo.completed
-    })
+    db_todo.name = todo.name
+    db_todo.completed = todo.completed
     db.commit()
     db.refresh(db_todo)
     return db_todo
