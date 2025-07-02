@@ -7,48 +7,32 @@ from schema import ToDoRequest, ToDoResponse
 from database import SessionLocal
 import crud
 
-# LangChain (actualizado con imports modernos)
+# LangChain moderno
 from langchain_openai import OpenAI
 from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
+from langchain_core.runnables import RunnableSequence
 
+# Inicializar modelo LLM
 langchain_llm = OpenAI(temperature=0)
 
-# Summarize template
-summarize_template_string = """
-    Provide a summary for the following text:
-    {text}
-"""
-
-summarize_prompt = PromptTemplate(
-    template=summarize_template_string,
-    input_variables=['text'],
+# Prompt para resumen
+summarize_prompt = PromptTemplate.from_template(
+    "Provide a summary for the following text:\n{text}"
 )
 
-summarize_chain = LLMChain(
-    llm=langchain_llm,
-    prompt=summarize_prompt,
+# Prompt para poema
+write_poem_prompt = PromptTemplate.from_template(
+    "Write a short poem with the following text:\n{text}"
 )
 
-# Poem template
-write_poem_template_string = """
-    Write a short poem with the following text:
-    {text}
-"""
+# Cadena en estilo moderno
+summarize_chain: RunnableSequence = summarize_prompt | langchain_llm
+write_poem_chain: RunnableSequence = write_poem_prompt | langchain_llm
 
-write_poem_prompt = PromptTemplate(
-    template=write_poem_template_string,
-    input_variables=['text'],
-)
-
-write_poem_chain = LLMChain(
-    llm=langchain_llm,
-    prompt=write_poem_prompt,
-)
-
+# FastAPI router
 router = APIRouter()
 
-# DB dependency
+# Dependencia de base de datos
 def get_db():
     db = SessionLocal()
     try:
@@ -56,7 +40,7 @@ def get_db():
     finally:
         db.close()
 
-# CRUD Endpoints
+# Endpoints CRUD
 @router.get("/todos", response_model=List[ToDoResponse])
 def get_todos(completed: bool = None, db: Session = Depends(get_db)):
     return crud.read_todos(db, completed)
@@ -86,20 +70,21 @@ def delete(id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="To-do no encontrado")
     return {"message": "To-do eliminado"}
 
-# ✅ Endpoint para resumen
+# Modelo de entrada para resumen
 class TextRequest(BaseModel):
     text: str
 
+# Endpoint para generar resumen
 @router.post("/summarize-text")
 async def summarize_text(request: TextRequest):
-    summary = summarize_chain.run(text=request.text)
+    summary = summarize_chain.invoke({"text": request.text})
     return {"summary": {"text": summary}}
 
-# ✅ Endpoint para poema
+# Endpoint para generar poema a partir de ToDo
 @router.post("/write-poem/{id}")
 async def write_poem_by_todo(id: int, db: Session = Depends(get_db)):
     todo = crud.read_todo(db, id)
     if todo is None:
-        raise HTTPException(status_code=404, detail="to do not found")
-    poem = write_poem_chain.run(text=todo.name)
+        raise HTTPException(status_code=404, detail="To-do no encontrado")
+    poem = write_poem_chain.invoke({"text": todo.name})
     return {"poem": poem}
